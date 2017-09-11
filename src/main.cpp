@@ -65,14 +65,21 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+
+void SendReset(uWS::WebSocket<uWS::SERVER> &ws) {
+  std::string msg = "42[\"reset\",{}]";
+  ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+}
+
 int main() {
   uWS::Hub h;
 
-  // MPC is initialized here!
   MPC mpc;
+  unsigned int iterations = 0;
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&mpc, &iterations](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
+
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -84,6 +91,9 @@ int main() {
         auto j = json::parse(s);
         string event = j[0].get<string>();
         if (event == "telemetry") {
+
+          iterations++;
+
           // j[1] is the data JSON object
           vector<double> ptsx = j[1]["ptsx"];
           vector<double> ptsy = j[1]["ptsy"];
@@ -92,14 +102,39 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
+
+          Eigen::VectorXd ptsx_transform(ptsx.size());
+          Eigen::VectorXd ptsy_transform(ptsx.size());
+
+          for (int i = 0; i < ptsx.size(); i++) {
+            double shift_x = ptsx[i] - px;
+            double shift_y = ptsy[i] - py;
+
+            ptsx_transform[i] = (shift_x * cos(0-psi) - shift_y * sin(0-psi));
+            ptsy_transform[i] = (shift_x * sin(0-psi) + shift_y * cos(0-psi));
+          }
+
+          auto coeffs = polyfit(ptsx_transform, ptsy_transform, 3);
+
+          double cte = polyeval(coeffs, 0);
+          // epsi = psi - psi_desired
+          // psi_desired = atan(f'(x))
+          // f'(x) = coeffs[1] + 2 * px * coeffs[2] + 3 * px * coeffs[3] * pow(coeffs[3], 2)
+          // since psi = 0, px = 0 therefore we are left with:
+          double epsi = -atan(coeffs[1]);
+
+          Eigen::VectorXd state(6);
+          state << 0, 0, 0, v, cte, epsi;
+
+          //auto vars = mpc.Solve(state, coeffs);
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          double steer_value = 0.0;
+          double throttle_value = 0.3;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -120,6 +155,12 @@ int main() {
           //Display the waypoints/reference line
           vector<double> next_x_vals;
           vector<double> next_y_vals;
+
+          auto num_points = 25;
+          for (double  x = 2.5; x < 2.5 * num_points; x += 2.5) {
+            next_x_vals.push_back(x);
+            next_y_vals.push_back(polyeval(coeffs, x));
+          }
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
@@ -166,6 +207,8 @@ int main() {
 
   h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
+
+    SendReset(ws);
   });
 
   h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
