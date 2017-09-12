@@ -5,8 +5,8 @@
 
 using CppAD::AD;
 
-size_t N = 25;
-double dt = 0.05;
+size_t N = 15;
+double dt = 0.1;
 
 const double Lf = 2.67;
 
@@ -39,35 +39,38 @@ class FG_eval {
     // Any additions to the cost should be added to `fg[0]`.
     fg[0] = 0;
 
+    const double kCte = 1;  // 2000
+    const double kEpsi = 1; // 2000
+    const double kV = 1; // 1
+    const double kSteering = 1; // 5
+    const double kAcceleration = 1;  // 5
+    const double kSteeringChange = 1; // 200
+    const double kAccelChange = 1; // 10
+
     // The part of the cost based on the reference state.
     for (int t = 0; t < N; t++) {
-      fg[0] += CppAD::pow(vars[cte_start + t], 2);
-      fg[0] += CppAD::pow(vars[epsi_start + t], 2);
-      fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
+      fg[0] += kCte * CppAD::pow(vars[cte_start + t], 2);
+      fg[0] += kEpsi * CppAD::pow(vars[epsi_start + t], 2);
+      fg[0] += kV * CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Minimize the use of actuators.
     for (int t = 0; t < N - 1; t++) {
-      fg[0] += CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t], 2);
+      fg[0] += kSteering * CppAD::pow(vars[delta_start + t], 2);
+      fg[0] += kAcceleration * CppAD::pow(vars[a_start + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
-      fg[0] += CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += kSteeringChange * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+      fg[0] += kAccelChange * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
     //
     // Setup Constraints
     //
-    // NOTE: In this section you'll setup the model constraints.
 
     // Initial constraints
-    //
-    // We add 1 to each of the starting indices due to cost being located at
-    // index 0 of `fg`.
-    // This bumps up the position of all the other values.
     fg[1 + x_start] = vars[x_start];
     fg[1 + y_start] = vars[y_start];
     fg[1 + psi_start] = vars[psi_start];
@@ -98,7 +101,10 @@ class FG_eval {
       AD<double> a0 = vars[a_start + t - 1];
 
       AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] * CppAD::pow(x0, 2) + coeffs[3] * CppAD::pow(x0, 3);
-      AD<double> psides0 = CppAD::atan(coeffs[1]);
+      // psi_desired = f'(x), 3rd order polynomial = a + bx + cx^2 + dx^3
+      // f'(x) of 3rd of polynomial = b + 2 * cx + 3 * dx^2
+      auto f_derivative = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * CppAD::pow(x0, 2);
+      AD<double> psides0 = CppAD::atan(f_derivative);
 
       // Here's `x` to get you started.
       // The idea here is to constraint this value to be 0.
@@ -114,10 +120,8 @@ class FG_eval {
       fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
       fg[1 + psi_start + t] = psi1 - (psi0 + v0 * delta0 / Lf * dt);
       fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
-      fg[1 + cte_start + t] =
-          cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
-      fg[1 + epsi_start + t] =
-          epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
+      fg[1 + cte_start + t] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
+      fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
     }
   }
 };
@@ -162,16 +166,13 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     vars_upperbound[i] = 1.0e19;
   }
 
-  // The upper and lower limits of delta are set to -25 and 25
-  // degrees (values in radians).
-  // NOTE: Feel free to change this to something else.
+  // The upper and lower limits of delta are set to -25 and 25 in radians
   for (int i = delta_start; i < a_start; i++) {
     vars_lowerbound[i] = -0.436332;
     vars_upperbound[i] = 0.436332;
   }
 
   // Acceleration/decceleration upper and lower limits.
-  // NOTE: Feel free to change this to something else.
   for (int i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
@@ -203,41 +204,32 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // object that computes objective and constraints
   FG_eval fg_eval(coeffs);
 
-  //
-  // NOTE: You don't have to worry about these options
-  //
-  // options for IPOPT solver
   std::string options;
-  // Uncomment this if you'd like more print information
   options += "Integer print_level  0\n";
-  // NOTE: Setting sparse to true allows the solver to take advantage
-  // of sparse routines, this makes the computation MUCH FASTER. If you
-  // can uncomment 1 of these and see if it makes a difference or not but
-  // if you uncomment both the computation time should go up in orders of
-  // magnitude.
   options += "Sparse  true        forward\n";
   options += "Sparse  true        reverse\n";
-  // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
-  // Change this as you see fit.
   options += "Numeric max_cpu_time          0.5\n";
 
-  // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
 
-  // solve the problem
   CppAD::ipopt::solve<Dvector, FG_eval>(
       options, vars, vars_lowerbound, vars_upperbound, constraints_lowerbound,
       constraints_upperbound, fg_eval, solution);
 
-  // Check some of the solution values
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
   // Cost
   auto cost = solution.obj_value;
   std::cout << "Cost " << cost << std::endl;
 
-  return {solution.x[x_start + 1],   solution.x[y_start + 1],
-          solution.x[psi_start + 1], solution.x[v_start + 1],
-          solution.x[cte_start + 1], solution.x[epsi_start + 1],
-          solution.x[delta_start],   solution.x[a_start]};
+  vector<double> ret_values;
+  ret_values.push_back(solution.x[delta_start]);
+  ret_values.push_back(solution.x[a_start]);
+
+  for (size_t i = 1; i < y_start; i++) {
+    ret_values.push_back(solution.x[x_start + i]);
+    ret_values.push_back(solution.x[y_start + i]);
+  }
+
+  return ret_values;
 }

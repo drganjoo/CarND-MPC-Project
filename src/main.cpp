@@ -68,7 +68,7 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
 
 void SendReset(uWS::WebSocket<uWS::SERVER> &ws) {
   std::string msg = "42[\"reset\",{}]";
-  ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+  ws.send(msg.c_str(), msg.length(), uWS::OpCode::TEXT);
 }
 
 int main() {
@@ -76,6 +76,7 @@ int main() {
 
   MPC mpc;
   unsigned int iterations = 0;
+  static bool has_reset = false;
 
   h.onMessage([&mpc, &iterations](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -85,12 +86,20 @@ int main() {
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
     cout << sdata << endl;
+
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
         auto j = json::parse(s);
         string event = j[0].get<string>();
         if (event == "telemetry") {
+
+          if (!has_reset) {
+            SendReset(ws);
+            has_reset = true;
+            return;
+          }
+
 
           iterations++;
 
@@ -102,7 +111,7 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
-
+          // transform all points sent by the simulator into car coordinate system
           Eigen::VectorXd ptsx_transform(ptsx.size());
           Eigen::VectorXd ptsy_transform(ptsx.size());
 
@@ -116,41 +125,34 @@ int main() {
 
           auto coeffs = polyfit(ptsx_transform, ptsy_transform, 3);
 
-          double cte = polyeval(coeffs, 0);
+          // figure out the cte and epsi
           // epsi = psi - psi_desired
           // psi_desired = atan(f'(x))
           // f'(x) = coeffs[1] + 2 * px * coeffs[2] + 3 * px * coeffs[3] * pow(coeffs[3], 2)
           // since psi = 0, px = 0 therefore we are left with:
+
+          double cte = polyeval(coeffs, 0);
           double epsi = -atan(coeffs[1]);
 
           Eigen::VectorXd state(6);
           state << 0, 0, 0, v, cte, epsi;
 
-          //auto vars = mpc.Solve(state, coeffs);
-          /*
-          * TODO: Calculate steering angle and throttle using MPC.
-          *
-          * Both are in between [-1, 1].
-          *
-          */
-          double steer_value = 0.0;
-          double throttle_value = 0.3;
+          vector<double> vars = mpc.Solve(state, coeffs);
 
-          json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
-          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = throttle_value;
+          const double Lf = 2.67;
+          const double steering_to_degrees = deg2rad(25.0) * Lf;
 
-          //Display the MPC predicted trajectory 
+          double steer_value = vars[0] / steering_to_degrees;
+          double throttle_value = vars[1];
+
+          // Display the MPC predicted trajectory
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Green line
-
-          msgJson["mpc_x"] = mpc_x_vals;
-          msgJson["mpc_y"] = mpc_y_vals;
+          for (size_t i = 2; i < vars.size(); i += 2) {
+              mpc_x_vals.push_back(vars[i]);
+              mpc_y_vals.push_back(vars[i + 1]);
+          }
 
           //Display the waypoints/reference line
           vector<double> next_x_vals;
@@ -162,15 +164,18 @@ int main() {
             next_y_vals.push_back(polyeval(coeffs, x));
           }
 
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Yellow line
+          json msgJson;
+          msgJson["steering_angle"] = steer_value;
+          msgJson["throttle"] = throttle_value;
+
+          msgJson["mpc_x"] = mpc_x_vals;
+          msgJson["mpc_y"] = mpc_y_vals;
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
-
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
@@ -180,7 +185,8 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(100));
+          //this_thread::sleep_for(chrono::milliseconds(100));
+
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
@@ -207,8 +213,6 @@ int main() {
 
   h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
-
-    SendReset(ws);
   });
 
   h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
