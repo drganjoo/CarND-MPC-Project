@@ -46,20 +46,20 @@ class FG_eval {
     const double kAccelChange = 10; // 10
 
     // The part of the cost based on the reference state.
-    for (int t = 0; t < N; t++) {
+    for (size_t t = 0; t < N; t++) {
       fg[0] += kCte * CppAD::pow(vars[cte_start + t], 2);
       fg[0] += kEpsi * CppAD::pow(vars[epsi_start + t], 2);
       fg[0] += kV * CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Minimize the use of actuators.
-    for (int t = 0; t < N - 1; t++) {
+    for (size_t t = 0; t < N - 1; t++) {
       fg[0] += kSteering * CppAD::pow(vars[delta_start + t], 2);
       fg[0] += kAcceleration * CppAD::pow(vars[a_start + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
-    for (int t = 0; t < N - 2; t++) {
+    for (size_t t = 0; t < N - 2; t++) {
       fg[0] += kSteeringChange * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
       fg[0] += kAccelChange * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
@@ -142,7 +142,7 @@ MPC::MPC() {
 }
 
 MPC::~MPC() {
-  
+
 }
 
 Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
@@ -182,13 +182,13 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   }
 
   // The upper and lower limits of delta are set to -25 and 25 in radians
-  for (int i = delta_start; i < a_start; i++) {
+  for (size_t i = delta_start; i < a_start; i++) {
     vars_lowerbound[i] = -0.436332 * Lf;
     vars_upperbound[i] = 0.436332 * Lf;
   }
 
   // Acceleration/decceleration upper and lower limits.
-  for (int i = a_start; i < n_vars; i++) {
+  for (size_t i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 0.6;
   }

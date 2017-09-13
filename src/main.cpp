@@ -106,7 +106,7 @@ int main() {
           Eigen::VectorXd ptsx_transform(ptsx.size());
           Eigen::VectorXd ptsy_transform(ptsx.size());
 
-          for (int i = 0; i < ptsx.size(); i++) {
+          for (size_t i = 0; i < ptsx.size(); i++) {
             double shift_x = ptsx[i] - px;
             double shift_y = ptsy[i] - py;
 
