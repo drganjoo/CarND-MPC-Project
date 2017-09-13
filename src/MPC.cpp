@@ -2,13 +2,10 @@
 #include <cppad/cppad.hpp>
 #include <cppad/ipopt/solve.hpp>
 #include "Eigen-3.3/Eigen/Core"
+#include "helpers.h"
 
 using CppAD::AD;
 
-size_t N = 15;
-double dt = 0.1;
-
-const double Lf = 2.67;
 
 // Both the reference cross track and orientation errors are 0.
 // The reference velocity is set to 40 mph.
@@ -17,14 +14,6 @@ double ref_v = 40;
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
 // when one variable starts and another ends to make our lifes easier.
-size_t x_start = 0;
-size_t y_start = x_start + N;
-size_t psi_start = y_start + N;
-size_t v_start = psi_start + N;
-size_t cte_start = v_start + N;
-size_t epsi_start = cte_start + N;
-size_t delta_start = epsi_start + N;
-size_t a_start = delta_start + N - 1;
 
 class FG_eval {
  public:
@@ -132,9 +121,8 @@ class FG_eval {
 MPC::MPC() {}
 MPC::~MPC() {}
 
-vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
+bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
-  typedef CPPAD_TESTVECTOR(double) Dvector;
 
   double x = state[0];
   double y = state[1];
@@ -210,26 +198,31 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   options += "Sparse  true        reverse\n";
   options += "Numeric max_cpu_time          0.5\n";
 
-  CppAD::ipopt::solve_result<Dvector> solution;
-
   CppAD::ipopt::solve<Dvector, FG_eval>(
       options, vars, vars_lowerbound, vars_upperbound, constraints_lowerbound,
       constraints_upperbound, fg_eval, solution);
 
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
-  // Cost
   auto cost = solution.obj_value;
   std::cout << "Cost " << cost << std::endl;
 
-  vector<double> ret_values;
-  ret_values.push_back(solution.x[delta_start]);
-  ret_values.push_back(solution.x[a_start]);
+  return ok;
+}
 
+void MPC::GetPredictedPoints(vector<double> &x, vector<double> &y) {
   for (size_t i = 1; i < y_start; i++) {
-    ret_values.push_back(solution.x[x_start + i]);
-    ret_values.push_back(solution.x[y_start + i]);
+    x.push_back(solution.x[x_start + i]);
+    y.push_back(solution.x[y_start + i]);
   }
+}
 
-  return ret_values;
+void MPC::GetPolyFitPoints(Eigen::VectorXd &coeffs, vector<double> &x, vector<double> &y) {
+  auto num_points = 25;
+  auto distance = 2.5;
+
+  for (double i = 0; i < num_points; i++) {
+    x.push_back(i * distance);
+    y.push_back(polyeval(coeffs, i * distance));
+  }
 }
