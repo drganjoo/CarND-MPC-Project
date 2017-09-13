@@ -129,7 +129,6 @@ int main() {
 
           // cater to the latency. figure out where the car will be in 100ms
           // and then pass that to the solver
-#ifdef _USE_EQUATIONS
           const double latency = 0.1;
           px = v * latency;
           py = 0;                           // lets keep this 0 but cater the effect into CTE
@@ -137,20 +136,14 @@ int main() {
           epsi += psi;
           cte += v * sin(epsi) * latency;   // CTE is basically how far the car is from the Y, so just increase that with delta_y
           v += a * latency;
-#else
-          px = 0;
-          py = 0;
-          psi = 0;
-#endif
 
-          Eigen::VectorXd state(8);
-          state << px, py, psi, v, cte, epsi, delta, a;
+          Eigen::VectorXd state(6);
+          state << px, py, psi, v, cte, epsi;
 
           Result mpc_result = mpc.Solve(state, coeffs);
 
           double steer_value;
           double throttle_value;
-
 
           steer_value = mpc_result.steering;
           throttle_value = mpc_result.throttle;

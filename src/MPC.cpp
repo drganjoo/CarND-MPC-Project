@@ -3,8 +3,6 @@
 #include <cppad/ipopt/solve.hpp>
 #include "Eigen-3.3/Eigen/Core"
 
-#define _USE_LATENCY_CONSTRAINT
-
 using CppAD::AD;
 
 size_t N = 26;
@@ -25,7 +23,6 @@ size_t cte_start = v_start + N;
 size_t epsi_start = cte_start + N;
 size_t delta_start = epsi_start + N;
 size_t a_start = delta_start + N - 1;
-size_t latency_constraint_start = delta_start;
 
 class FG_eval {
  public:
@@ -35,9 +32,6 @@ class FG_eval {
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
   void operator()(ADvector& fg, const ADvector& vars) {
-
-    cout << "FG Size: " << fg.size() << endl;
-    cout << "Vars Size: " << vars.size() << endl;
 
     // The cost is stored is the first element of `fg`.
     // Any additions to the cost should be added to `fg[0]`.
@@ -82,11 +76,6 @@ class FG_eval {
     fg[1 + cte_start] = vars[cte_start];
     fg[1 + epsi_start] = vars[epsi_start];
 
-    #ifdef _USE_LATENCY_CONSTRAINT
-    fg[1 + latency_constraint_start] = vars[delta_start];
-    fg[1 + latency_constraint_start + 1] = vars[a_start];
-    #endif
-
     // The rest of the constraints
     for (size_t t = 1; t < N; t++) {
       // The state at time t+1 .
@@ -130,27 +119,7 @@ class FG_eval {
       fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
       fg[1 + cte_start + t] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
       fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
-
-      // put in a constraint that the acceleration and steering for every alternate
-      // time T won't be changed
-//#ifdef _USE_LATENCY_CONSTRAINT
-//      // for every other 100ms we need to make sure that there is a constraint
-//      // to use the same value as before
-//
-//      if (t % 2 == 2) {
-//        //cout << "About to access: " << delta_start + t << " and " << a_start + t << endl;
-//
-//        AD<double> delta1 = vars[delta_start + t];
-//        AD<double> a1 = vars[a_start + t];
-//
-//        //cout << "Constraint @: " << 1 + delta_start + t - 1 << " for time: " << t << endl;
-//        fg[1 + latency_constraint_start + t + 1] = delta1 - delta0;
-//        fg[1 + latency_constraint_start + t + 2] = a1 - a0;
-//      }
-//#endif
     }
-
-    cout << "Going out" << endl;
   }
 };
 
@@ -159,9 +128,6 @@ class FG_eval {
 //
 MPC::MPC() {
   cout << "Using N: " << N << " DT: " << dt << " Ref speed: " << ref_v << endl;
-#ifdef _USE_LATENCY_CONSTRAINT
-  cout << "Using latency constraints" << endl;
-#endif
 }
 
 MPC::~MPC() {
@@ -183,21 +149,6 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   size_t n_vars = N * 6 + (N - 1) * 2;
   size_t n_constraints = N * 6;
 
-#ifdef _USE_LATENCY_CONSTRAINT
-  double delta = state[6];
-  double a = state[7];
-
-  // we need to add constraint for every other 100ms to enforce that steering and acceleration
-  // has to be the same as before
-
-  assert(N % 2 == 0);
-
-  //double extra = N + 1;
-  //n_constraints += extra;
-  n_constraints += 2;
-#else
-#endif
-
   Dvector vars(n_vars);
   for (size_t i = 0; i < n_vars; i++) {
     vars[i] = 0;
@@ -210,11 +161,6 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   vars[v_start] = v;
   vars[cte_start] = cte;
   vars[epsi_start] = epsi;
-
-  #ifdef _USE_LATENCY_CONSTRAINT
-  vars[delta_start] = delta;
-  vars[a_start] = a;
-  #endif
 
   Dvector vars_lowerbound(n_vars);
   Dvector vars_upperbound(n_vars);
@@ -251,13 +197,6 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   constraints_lowerbound[v_start] = v;
   constraints_lowerbound[cte_start] = cte;
   constraints_lowerbound[epsi_start] = epsi;
-
-#ifdef _USE_LATENCY_CONSTRAINT
-  constraints_lowerbound[latency_constraint_start ] = delta;
-  constraints_upperbound[latency_constraint_start ] = delta;
-  constraints_lowerbound[latency_constraint_start  + 1] = a;
-  constraints_upperbound[latency_constraint_start  + 1] = a;
-#endif
 
   constraints_upperbound[x_start] = x;
   constraints_upperbound[y_start] = y;
