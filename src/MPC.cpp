@@ -10,7 +10,7 @@ double dt = 0.1;
 
 // Both the reference cross track and orientation errors are 0.
 // The reference velocity is set to 40 mph.
-const double ref_v = 50;
+const double ref_v = 40;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -123,13 +123,13 @@ class FG_eval {
 
       // put in a constraint that the acceleration and steering for every alternate
       // time T won't be changed
-      if (t % 2 == 1) {
-        AD<double> delta1 = vars[delta_start + t];
-        AD<double> a1 = vars[a_start + t];
-
-        fg[1 + delta_start + t - 1] = delta1 - delta0;
-        fg[1 + delta_start + t] = a1 - a0;
-      }
+//      if (t % 2 == 1) {
+//        AD<double> delta1 = vars[delta_start + t];
+//        AD<double> a1 = vars[a_start + t];
+//
+//        fg[1 + delta_start + t - 1] = delta1 - delta0;
+//        fg[1 + delta_start + t] = a1 - a0;
+//      }
     }
   }
 };
@@ -137,8 +137,13 @@ class FG_eval {
 //
 // MPC class definition implementation.
 //
-MPC::MPC() {}
-MPC::~MPC() {}
+MPC::MPC() {
+  cout << "Using N: " << N << " DT: " << dt << endl;
+}
+
+MPC::~MPC() {
+  
+}
 
 Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   Result res;
@@ -153,8 +158,8 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   double epsi = state[5];
 
   size_t n_vars = N * 6 + (N - 1) * 2;
-//  size_t n_constraints = N * 6;
-  size_t n_constraints = N * 6 + (N - 1);
+  size_t n_constraints = N * 6;
+  //size_t n_constraints = N * 6 + (N - 1);
 
   Dvector vars(n_vars);
   for (size_t i = 0; i < n_vars; i++) {

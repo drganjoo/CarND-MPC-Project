@@ -169,11 +169,11 @@ int main() {
           steer_value /= steering_to_control;
 
           cout.precision(5);
-          cout << "CTE:\t" << cte
-               << " MPC steering (Radians):\t" << fixed << mpc_result.steering
-               << " MPC steering (Degrees):\t" << fixed << rad2deg(mpc_result.steering)
-               << "Steering:\t" << steer_value
-               << " Throttle:\t" << fixed << mpc_result.throttle << endl;
+//          cout << "CTE:\t" << cte
+//               << " MPC steering (Radians):\t" << fixed << mpc_result.steering
+//               << " MPC steering (Degrees):\t" << fixed << rad2deg(mpc_result.steering)
+//               << "Steering:\t" << steer_value
+//               << " Throttle:\t" << fixed << mpc_result.throttle << endl;
 
           // Display the MPC predicted trajectory
           vector<double> mpc_x_vals;
@@ -256,5 +256,6 @@ int main() {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }
+
   h.run();
 }
