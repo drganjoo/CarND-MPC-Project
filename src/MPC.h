@@ -2,8 +2,6 @@
 #define MPC_H
 
 #include <vector>
-#include <cppad/cppad.hpp>
-#include <cppad/ipopt/solve_result.hpp>
 #include "Eigen-3.3/Eigen/Core"
 
 using namespace std;

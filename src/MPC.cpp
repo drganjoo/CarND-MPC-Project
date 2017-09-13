@@ -12,11 +12,19 @@ const double Lf = 2.67;
 
 // Both the reference cross track and orientation errors are 0.
 // The reference velocity is set to 40 mph.
-const double ref_v = 30;
+const double ref_v = 40;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
 // when one variable starts and another ends to make our lifes easier.
+size_t x_start = 0;
+size_t y_start = x_start + N;
+size_t psi_start = y_start + N;
+size_t v_start = psi_start + N;
+size_t cte_start = v_start + N;
+size_t epsi_start = cte_start + N;
+size_t delta_start = epsi_start + N;
+size_t a_start = delta_start + N - 1;
 
 class FG_eval {
  public:
@@ -167,8 +175,8 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // Acceleration/decceleration upper and lower limits.
   for (int i = a_start; i < n_vars; i++) {
-    vars_lowerbound[i] = -0.4;
-    vars_upperbound[i] = 0.4;
+    vars_lowerbound[i] = -0.5;
+    vars_upperbound[i] = 0.5;
   }
 
   // Lower and upper limits for the constraints
@@ -203,6 +211,8 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   options += "Sparse  true        reverse\n";
   options += "Numeric max_cpu_time          0.5\n";
 
+  CppAD::ipopt::solve_result<Dvector> solution;
+
   CppAD::ipopt::solve<Dvector, FG_eval>(
       options, vars, vars_lowerbound, vars_upperbound, constraints_lowerbound,
       constraints_upperbound, fg_eval, solution);
@@ -218,11 +228,6 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     res.x.push_back(solution.x[x_start + i]);
     res.y.push_back(solution.x[y_start + i]);
   }
-}
-
-void MPC::GetPolyFitPoints(Eigen::VectorXd &coeffs, vector<double> &x, vector<double> &y) {
-  auto num_points = 25;
-  auto distance = 2.5;
 
   return res;
 }

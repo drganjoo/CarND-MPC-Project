@@ -77,8 +77,11 @@ int main() {
 //  bool initialized = false;
 
   h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
-                     uWS::OpCode opCode) {
+                  uWS::OpCode opCode) {
 
+    // "42" at the start of the message means there's a websocket message event.
+    // The 4 signifies a websocket message
+    // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
 //    cout << sdata << endl;
 
@@ -170,7 +173,7 @@ int main() {
           cout << "CTE:\t" << cte
                << " MPC steering (Radians):\t" << fixed << mpc_result.steering
                << " MPC steering (Degrees):\t" << fixed << rad2deg(mpc_result.steering)
-              << "Steering:\t" << steer_value
+               << "Steering:\t" << steer_value
                << " Throttle:\t" << fixed << mpc_result.throttle << endl;
 
           // Display the MPC predicted trajectory
@@ -197,12 +200,6 @@ int main() {
             next_x_vals.push_back(i * distance);
             next_y_vals.push_back(polyeval(coeffs, i * distance));
           }
-          else {
-
-          }
-
-          steer_value = 0.0;
-          throttle_value = 0.0;
 
           json msgJson;
           msgJson["steering_angle"] = -steer_value;
@@ -218,7 +215,7 @@ int main() {
 //          std::cout << msg << std::endl;
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          //this_thread::sleep_for(chrono::milliseconds(100));
+//          this_thread::sleep_for(chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
