@@ -2,14 +2,17 @@
 #include <cppad/cppad.hpp>
 #include <cppad/ipopt/solve.hpp>
 #include "Eigen-3.3/Eigen/Core"
-#include "helpers.h"
 
 using CppAD::AD;
 
+size_t N = 25;
+double dt = 0.1;
+
+const double Lf = 2.67;
 
 // Both the reference cross track and orientation errors are 0.
 // The reference velocity is set to 40 mph.
-double ref_v = 40;
+const double ref_v = 30;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -28,13 +31,13 @@ class FG_eval {
     // Any additions to the cost should be added to `fg[0]`.
     fg[0] = 0;
 
-    const double kCte = 1;  // 2000
-    const double kEpsi = 1; // 2000
+    const double kCte = 2000;  // 2000
+    const double kEpsi = 2000; // 2000
     const double kV = 1; // 1
-    const double kSteering = 1; // 5
-    const double kAcceleration = 1;  // 5
-    const double kSteeringChange = 1; // 200
-    const double kAccelChange = 1; // 10
+    const double kSteering = 5; // 5
+    const double kAcceleration = 5;  // 5
+    const double kSteeringChange = 200; // 200
+    const double kAccelChange = 10; // 10
 
     // The part of the cost based on the reference state.
     for (int t = 0; t < N; t++) {
@@ -89,9 +92,9 @@ class FG_eval {
       AD<double> delta0 = vars[delta_start + t - 1];
       AD<double> a0 = vars[a_start + t - 1];
 
-      AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] * CppAD::pow(x0, 2) + coeffs[3] * CppAD::pow(x0, 3);
       // psi_desired = f'(x), 3rd order polynomial = a + bx + cx^2 + dx^3
       // f'(x) of 3rd of polynomial = b + 2 * cx + 3 * dx^2
+      AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] * CppAD::pow(x0, 2) + coeffs[3] * CppAD::pow(x0, 3);
       auto f_derivative = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * CppAD::pow(x0, 2);
       AD<double> psides0 = CppAD::atan(f_derivative);
 
@@ -121,8 +124,10 @@ class FG_eval {
 MPC::MPC() {}
 MPC::~MPC() {}
 
-bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
-  bool ok = true;
+Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
+  Result res;
+  res.ok = true;
+  typedef CPPAD_TESTVECTOR(double) Dvector;
 
   double x = state[0];
   double y = state[1];
@@ -156,14 +161,14 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // The upper and lower limits of delta are set to -25 and 25 in radians
   for (int i = delta_start; i < a_start; i++) {
-    vars_lowerbound[i] = -0.436332;
-    vars_upperbound[i] = 0.436332;
+    vars_lowerbound[i] = -0.436332 * Lf;
+    vars_upperbound[i] = 0.436332 * Lf;
   }
 
   // Acceleration/decceleration upper and lower limits.
   for (int i = a_start; i < n_vars; i++) {
-    vars_lowerbound[i] = -1.0;
-    vars_upperbound[i] = 1.0;
+    vars_lowerbound[i] = -0.4;
+    vars_upperbound[i] = 0.4;
   }
 
   // Lower and upper limits for the constraints
@@ -202,18 +207,16 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
       options, vars, vars_lowerbound, vars_upperbound, constraints_lowerbound,
       constraints_upperbound, fg_eval, solution);
 
-  ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
+  res.ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
-  auto cost = solution.obj_value;
-  std::cout << "Cost " << cost << std::endl;
+  // Cost
+  res.cost = solution.obj_value;
+  res.steering = solution.x[delta_start];
+  res.throttle = solution.x[a_start];
 
-  return ok;
-}
-
-void MPC::GetPredictedPoints(vector<double> &x, vector<double> &y) {
-  for (size_t i = 1; i < y_start; i++) {
-    x.push_back(solution.x[x_start + i]);
-    y.push_back(solution.x[y_start + i]);
+  for (size_t i = 1; i < N; i++) {
+    res.x.push_back(solution.x[x_start + i]);
+    res.y.push_back(solution.x[y_start + i]);
   }
 }
 
@@ -221,8 +224,5 @@ void MPC::GetPolyFitPoints(Eigen::VectorXd &coeffs, vector<double> &x, vector<do
   auto num_points = 25;
   auto distance = 2.5;
 
-  for (double i = 0; i < num_points; i++) {
-    x.push_back(i * distance);
-    y.push_back(polyeval(coeffs, i * distance));
-  }
+  return res;
 }
