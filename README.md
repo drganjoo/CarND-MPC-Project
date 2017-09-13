@@ -1,131 +1,109 @@
 # CarND-Controls-MPC
-Self-Driving Car Engineer Nanodegree Program
 
----
+## Model Description
 
-## Dependencies
+Kinematic model of the car is used consisting of position, velocity, orientation, cross track and orientation angle errors.
 
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1(mac, linux), 3.81(Windows)
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-    Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
-* Fortran Compiler
-  * Mac: `brew install gcc` (might not be required)
-  * Linux: `sudo apt-get install gfortran`. Additionall you have also have to install gcc and g++, `sudo apt-get install gcc g++`. Look in [this Dockerfile](https://github.com/udacity/CarND-MPC-Quizzes/blob/master/Dockerfile) for more info.
-* [Ipopt](https://projects.coin-or.org/Ipopt)
-  * If challenges to installation are encountered (install script fails).  Please review this thread for tips on installing Ipopt.
-  * Mac: `brew install ipopt`
-       +  Some Mac users have experienced the following error:
-       ```
-       Listening to port 4567
-       Connected!!!
-       mpc(4561,0x7ffff1eed3c0) malloc: *** error for object 0x7f911e007600: incorrect checksum for freed object
-       - object was probably modified after being freed.
-       *** set a breakpoint in malloc_error_break to debug
-       ```
-       This error has been resolved by updrading ipopt with
-       ```brew upgrade ipopt --with-openblas```
-       per this [forum post](https://discussions.udacity.com/t/incorrect-checksum-for-freed-object/313433/19).
-  * Linux
-    * You will need a version of Ipopt 3.12.1 or higher. The version available through `apt-get` is 3.11.x. If you can get that version to work great but if not there's a script `install_ipopt.sh` that will install Ipopt. You just need to download the source from the Ipopt [releases page](https://www.coin-or.org/download/source/Ipopt/).
-    * Then call `install_ipopt.sh` with the source directory as the first argument, ex: `sudo bash install_ipopt.sh Ipopt-3.12.1`. 
-  * Windows: TODO. If you can use the Linux subsystem and follow the Linux instructions.
-* [CppAD](https://www.coin-or.org/CppAD/)
-  * Mac: `brew install cppad`
-  * Linux `sudo apt-get install cppad` or equivalent.
-  * Windows: TODO. If you can use the Linux subsystem and follow the Linux instructions.
-* [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). This is already part of the repo so you shouldn't have to worry about it.
-* Simulator. You can download these from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
-* Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
+### State of the system
+
+State of the system consists of the following:
+
+|Variable|Description|
+|---|---|
+|px| x coordinate of the car|
+|py| y coordinate of the car|
+|Ψ (psi)| Orientation of the car (in radians)|
+|v|Velocity of the car|
+|CTE| Cross track error|
+|EPSI|Oreintation error|
+
+### Actuators
+
+The following are the 2 actuators:
+
+|Actuator|Description|Range|
+|---|---|---|
+| 𝛿 (delta)| Steering angle| -1 to 1 (corresponds to -25 to +25 degrees)|
+| a| Throttle to be applied at each stage| -1 to 1 (Corresponding to -100 to +100 mph, and -1 implies breaking/reverse)
+
+### State Update Equations
+
+|State|Update Equation|
+|---|---|
+| px | px(t) = px(t-1) + v(t-1) * cos(Ψ(t-1)) * dt|
+| py | px(t) = py(t-1) + v(t-1) * sin(Ψ(t-1)) * dt|
+| Ψ | Ψ(t) = Ψ(t-1) + v(t-1) / Lf * 𝛿(t-1) * dt|
+| v | v(t) = v(t-1) + a * dt|
+| CTE | CTE(t) = (f(x(t-1)) - y(t-1)) + (v(t-1) * sin(EΨ(t-1)) * dt)|
+| EΨ | EΨ(t) = Ψ(t-1) - Ψdes(t-1) + (v(t-1) / Lf * 𝛿(t-1) * dt)|
 
 
-## Basic Build Instructions
+f(x) = a + bx + cx^2 + dx^3 (3rd order polynomial)   
+Ψdes = atan(f'(x))   
+f'(x) = b + 2*x + 3*x^2
 
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./mpc`.
+*Note: Lf = 2.67*
 
-## Tips
+## Model Predictive Control
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.
+At each time step, the simualtor sends the x and y coordinates of the path (in global coordinate system) that the car should follow. The path is transformed to the car coordinate system and then a polynomial is fitted. IPOPT / CppAD is used for finding out a minimized cost solution in liue of the constraints (model update equations) in mind, such that the steering angle and car speed is tweeked to follow the given polynomial path.
 
-## Editor Settings
+## Timestamp lenght and Elapsed Duration (N & Dt)
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+**N = 16** & **Dt = 0.1** has been kept. Earlier N = 10 and Dt = 0.05 as well as N = 26 and Dt = 0.1 was also tried. Keep a higher N resulted in longer calculation time where as keeping it lower resulted in the car not being able to follow the path.
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+## Preprocessing
 
-## Code Style
+Before handing data to the MPC solver, given points were tranformed from the global coordinate system to the car coordinate system using the following equations for each of the given points:
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+```
+double shift_x = ptsx[i] - px;
+double shift_y = ptsy[i] - py;
 
-## Project Instructions and Rubric
+ptsx_transform[i] = (shift_x * cos(0-psi) - shift_y * sin(0-psi));
+ptsy_transform[i] = (shift_x * sin(0-psi) + shift_y * cos(0-psi));
+```
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+As per this transformation, px, py and Ψ ended up as 0. CTE and EΨ held information regarding how far the car was from the intended path and the orientation that it should be following.
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
+## Polynomial Fitting
 
-## Hints!
+A 3rd order polynomial was fitted to the transformed points and that along with its derivative was used as part of optimization equations that were setup for IPOPT.
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
+## Cost Function
 
-## Call for IDE Profiles Pull Requests
+The following factors were considered as part of cost:
 
-Help your fellow students!
+|Variable|Factor|Description|
+|---|---|---|
+|CTE|4000|A high cost value was associated with the CTE so as to keep the car on track
+|EΨ|2000|Second priority is given to the orientation error|
+|Δv|1|Difference between reference velocity and current velocity|
+|𝛿|5|Steering angle|
+|a|5|Acceleration|
+|ΔSteering|200|Change in steering angle from one timestep to the next. This was done to smooth out steering changes|
+|ΔAcceleration|10|Change in throttle from one timestep to the next. This was done to smooth out throttle changes|
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
+*Note: A basic cost factor was chosen from the classroom lesson and then it was further tweeked to make the car follow the track*
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+## Latency
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
+In order to deal with latency, once the points had been transformed and px, py and Ψ were considered 0, then the state update equations were used to move the car ahead 100ms, CTE and EΨ were recomupted and then solver was called for the updated car state, CTE and EΨ.
 
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
+The equations used were:
 
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
+```
+const double latency = 0.1;
 
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+px = v * latency;
+py = 0;
+psi = -v / Lf * delta * latency;
+epsi += psi;
+cte += v * sin(epsi) * latency;
+v += a * latency;
+```
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+*Note: These equations were mainly derived from the forum discussion: https://discussions.udacity.com/t/how-to-incorporate-latency-into-the-model/257391/64*
 
+**Other Ideas Tried**: Another idea, that did not turn out to be successful, was to handle latency using constraints within the solver. New constraints were setup in the solver so that at 0th timestep it was told to keep the same throttle / steering angle as was given by the simulator and the rest of the throttle / steering time steps were kept open for the solver to choose a value for them. I was hoping it will choose some value for the 2nd steering / throttle that would overall minimize the cost, but that resulted in the car not being able to follow the path.

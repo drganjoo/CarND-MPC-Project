@@ -123,16 +123,18 @@ int main() {
           // psi_desired = atan(f'(x))
           // f'(x) = coeffs[1] + 2 * px * coeffs[2] + 3 * px * coeffs[3] * pow(coeffs[3], 2)
           // since psi = 0, px = 0 therefore we are left with:
+          // epsi = -atn(coeffs[1]);
 
           double cte = polyeval(coeffs, 0);
           double epsi = -atan(coeffs[1]);
 
           // cater to the latency. figure out where the car will be in 100ms
-          // and then pass that to the solver
+          // and then pass that to the solver. Since all points / polyfit is based
+          // from the car's perspective, we just need to calculate px, new CTE and EPSI
           const double latency = 0.1;
           px = v * latency;
           py = 0;                           // lets keep this 0 but cater the effect into CTE
-          psi = -v / Lf * delta * latency;
+          psi = -v / Lf * delta * latency;  // negative since the angle is opposite to the steering delta sent to us
           epsi += psi;
           cte += v * sin(epsi) * latency;   // CTE is basically how far the car is from the Y, so just increase that with delta_y
           v += a * latency;
@@ -165,11 +167,7 @@ int main() {
           vector<double> mpc_y_vals;
 
           for (size_t i = 0; i < mpc_result.x.size(); i++) {
-            //mpc_x_vals.push_back(i);
-            //mpc_y_vals.push_back(0);
             mpc_x_vals.push_back(mpc_result.x[i]);
-
-            //cout << i << " = " << mpc_result.x[i] << endl;
             mpc_y_vals.push_back(mpc_result.y[i]);
           }
 
@@ -230,7 +228,6 @@ int main() {
 
   h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
                          char *message, size_t length) {
-    ws.close();
     std::cout << "Disconnected" << std::endl;
   });
 

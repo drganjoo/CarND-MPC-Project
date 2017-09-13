@@ -5,7 +5,7 @@
 
 using CppAD::AD;
 
-size_t N = 26;
+size_t N = 16;
 double dt = 0.1;
 
 // Both the reference cross track and orientation errors are 0.
