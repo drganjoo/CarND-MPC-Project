@@ -8,8 +8,10 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
 #include "json.hpp"
+#include <chrono>
 
-// for convenience
+using namespace std::chrono;
+using namespace std;
 using json = nlohmann::json;
 
 // For converting back and forth between radians and degrees.
@@ -65,27 +67,23 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
-
-void SendReset(uWS::WebSocket<uWS::SERVER> &ws) {
-  std::string msg = "42[\"reset\",{}]";
-  ws.send(msg.c_str(), msg.length(), uWS::OpCode::TEXT);
-}
-
 int main() {
   uWS::Hub h;
-
   MPC mpc;
   unsigned int iterations = 0;
-  static bool has_reset = false;
+  double last_cte = 0.0;
+  std::chrono::system_clock::time_point last_call = system_clock::now();
 
-  h.onMessage([&mpc, &iterations](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  bool initialized = false;
+
+  h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
 
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+//    cout << sdata << endl;
 
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
@@ -93,13 +91,6 @@ int main() {
         auto j = json::parse(s);
         string event = j[0].get<string>();
         if (event == "telemetry") {
-
-          if (!has_reset) {
-            SendReset(ws);
-            has_reset = true;
-            return;
-          }
-
 
           iterations++;
 
@@ -139,29 +130,63 @@ int main() {
 
           vector<double> vars = mpc.Solve(state, coeffs);
 
-          const double Lf = 2.67;
-          const double steering_to_degrees = deg2rad(25.0) * Lf;
+//          const double Lf = 2.67;
+//          const double steering_to_degrees = deg2rad(25.0) * Lf;
+//
+//          double steer_value = vars[0] / steering_to_degrees;
+//          double throttle_value = vars[1];
 
-          double steer_value = vars[0] / steering_to_degrees;
-          double throttle_value = vars[1];
+          double steer_value;
+          double throttle_value;
+
+          if (!initialized) {
+            initialized = true;
+            last_call = system_clock::now();
+            last_cte = cte;
+            steer_value = 0;
+            throttle_value = 0;
+          }
+          else {
+            const double kp = 0.09, kd = 0.2;
+
+            double dt = duration_cast<milliseconds>(system_clock::now() - last_call).count() / 1000.0;
+            last_call = system_clock::now();
+
+            steer_value = kp * cte + kd * (cte - last_cte) / dt;
+            throttle_value = 0.3;
+
+            last_cte = cte;
+          }
+
+          if (steer_value > 1)
+            steer_value = 1;
+          else if (steer_value < -11)
+            steer_value = -1;
+
+          steer_value = -steer_value;
+
+          cout << "CTE: " << cte << endl;
+          cout << steer_value << endl;
 
           // Display the MPC predicted trajectory
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 
-          for (size_t i = 2; i < vars.size(); i += 2) {
-              mpc_x_vals.push_back(vars[i]);
-              mpc_y_vals.push_back(vars[i + 1]);
-          }
+//          for (size_t i = 2; i < vars.size(); i += 2) {
+//              mpc_x_vals.push_back(vars[i]);
+//              mpc_y_vals.push_back(vars[i + 1]);
+//          }
 
           //Display the waypoints/reference line
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
-
           auto num_points = 25;
-          for (double  x = 2.5; x < 2.5 * num_points; x += 2.5) {
-            next_x_vals.push_back(x);
-            next_y_vals.push_back(polyeval(coeffs, x));
+          auto distance = 2.5;
+
+          vector<double> next_x_vals(num_points);
+          vector<double> next_y_vals(num_points);
+
+          for (double  i = 0; i < num_points; i++) {
+            next_x_vals.push_back(i * distance);
+            next_y_vals.push_back(polyeval(coeffs, i * distance));
           }
 
           json msgJson;
@@ -175,18 +200,10 @@ int main() {
           msgJson["next_y"] = next_y_vals;
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          //std::cout << msg << std::endl;
-          // Latency
-          // The purpose is to mimic real driving conditions where
-          // the car does actuate the commands instantly.
-          //
-          // Feel free to play around with this value but should be to drive
-          // around the track with 100ms latency.
-          //
+//          std::cout << msg << std::endl;
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
           //this_thread::sleep_for(chrono::milliseconds(100));
-
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
