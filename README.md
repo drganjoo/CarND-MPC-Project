@@ -15,7 +15,7 @@ State of the system consists of the following:
 |Ψ (psi)| Orientation of the car (in radians)|
 |v|Velocity of the car|
 |CTE| Cross track error|
-|EPSI|Oreintation error|
+|EPSI|Orientation error|
 
 ### Actuators
 
@@ -40,7 +40,7 @@ The following are the 2 actuators:
 
 f(x) = a + bx + cx^2 + dx^3 (3rd order polynomial)   
 Ψdes = atan(f'(x))   
-f'(x) = b + 2*x + 3*x^2
+f'(x) = b + c*2*x + d*3*x^2
 
 
 *Note: Lf = 2.67*
@@ -102,6 +102,8 @@ psi = -v / Lf * delta * latency;
 epsi += psi;
 cte += v * sin(epsi) * latency;
 v += a * latency;
+
+state << px, py, psi, v, cte, epsi;
 ```
 
 *Note: These equations were mainly derived from the forum discussion: https://discussions.udacity.com/t/how-to-incorporate-latency-into-the-model/257391/64*
