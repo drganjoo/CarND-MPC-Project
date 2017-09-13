@@ -71,10 +71,10 @@ int main() {
   uWS::Hub h;
   MPC mpc;
   unsigned int iterations = 0;
-  double last_cte = 0.0;
-  std::chrono::system_clock::time_point last_call = system_clock::now();
+//  double last_cte = 0.0;
+//  std::chrono::system_clock::time_point last_call = system_clock::now();
 
-  bool initialized = false;
+//  bool initialized = false;
 
   h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -128,7 +128,7 @@ int main() {
           Eigen::VectorXd state(6);
           state << 0, 0, 0, v, cte, epsi;
 
-          vector<double> vars = mpc.Solve(state, coeffs);
+          Result mpc_result = mpc.Solve(state, coeffs);
 
 //          const double Lf = 2.67;
 //          const double steering_to_degrees = deg2rad(25.0) * Lf;
@@ -139,43 +139,55 @@ int main() {
           double steer_value;
           double throttle_value;
 
-          if (!initialized) {
-            initialized = true;
-            last_call = system_clock::now();
-            last_cte = cte;
-            steer_value = 0;
-            throttle_value = 0;
-          }
-          else {
-            const double kp = 0.09, kd = 0.2;
+//          if (!initialized) {
+//            initialized = true;
+//            last_call = system_clock::now();
+//            last_cte = cte;
+//            steer_value = 0;
+//            throttle_value = 0;
+//          }
+//          else {
+//            const double kp = 0.09, kd = 0.2;
+//
+//            double dt = duration_cast<milliseconds>(system_clock::now() - last_call).count() / 1000.0;
+//            last_call = system_clock::now();
+//
+//            steer_value = kp * cte + kd * (cte - last_cte) / dt;
+//            throttle_value = 0.3;
+//
+//            last_cte = cte;
+//          }
+//          if (steer_value > 1)
+//            steer_value = 1;
+//          else if (steer_value < -11)
+//            steer_value = -1;
 
-            double dt = duration_cast<milliseconds>(system_clock::now() - last_call).count() / 1000.0;
-            last_call = system_clock::now();
+          steer_value = mpc_result.steering;
+          throttle_value = mpc_result.throttle;
 
-            steer_value = kp * cte + kd * (cte - last_cte) / dt;
-            throttle_value = 0.3;
+          const double Lf = 2.67;
+          const double steering_to_control = deg2rad(25.0) * Lf;
+          steer_value /= steering_to_control;
 
-            last_cte = cte;
-          }
-
-          if (steer_value > 1)
-            steer_value = 1;
-          else if (steer_value < -11)
-            steer_value = -1;
-
-          steer_value = -steer_value;
-
-          cout << "CTE: " << cte << endl;
-          cout << steer_value << endl;
+          cout.precision(5);
+          cout << "CTE:\t" << cte
+               << " MPC steering (Radians):\t" << fixed << mpc_result.steering
+               << " MPC steering (Degrees):\t" << fixed << rad2deg(mpc_result.steering)
+              << "Steering:\t" << steer_value
+               << " Throttle:\t" << fixed << mpc_result.throttle << endl;
 
           // Display the MPC predicted trajectory
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 
-//          for (size_t i = 2; i < vars.size(); i += 2) {
-//              mpc_x_vals.push_back(vars[i]);
-//              mpc_y_vals.push_back(vars[i + 1]);
-//          }
+          for (size_t i = 0; i < mpc_result.x.size(); i++) {
+            //mpc_x_vals.push_back(i);
+            //mpc_y_vals.push_back(0);
+            mpc_x_vals.push_back(mpc_result.x[i]);
+
+            //cout << i << " = " << mpc_result.x[i] << endl;
+            mpc_y_vals.push_back(mpc_result.y[i]);
+          }
 
           //Display the waypoints/reference line
           auto num_points = 25;
@@ -190,7 +202,7 @@ int main() {
           }
 
           json msgJson;
-          msgJson["steering_angle"] = steer_value;
+          msgJson["steering_angle"] = -steer_value;
           msgJson["throttle"] = throttle_value;
 
           msgJson["mpc_x"] = mpc_x_vals;
