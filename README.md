@@ -67,6 +67,10 @@ ptsy_transform[i] = (shift_x * sin(0-psi) + shift_y * cos(0-psi));
 
 As per this transformation, px, py and Ψ ended up as 0. CTE and EΨ held information regarding how far the car was from the intended path and the orientation that it should be following.
 
+## Postprocessing
+
+The steering angle given by the solver is in the range -0.436332 (-25 degrees in radians) to 0.436332 (25 degree in radians), which is converted to -1 to 1 range before sending it to the simulator. The sign is also changed (from positive to negative and vice versa) since the simulator requires opposite direction.
+
 ## Polynomial Fitting
 
 A 3rd order polynomial was fitted to the transformed points and that along with its derivative was used as part of optimization equations that were setup for IPOPT.
