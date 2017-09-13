@@ -3,7 +3,7 @@
 #include <cppad/ipopt/solve.hpp>
 #include "Eigen-3.3/Eigen/Core"
 
-#define _USE_LATENCY_CONSTRAINT
+//#define _USE_LATENCY_CONSTRAINT
 
 using CppAD::AD;
 
@@ -78,6 +78,11 @@ class FG_eval {
     fg[1 + cte_start] = vars[cte_start];
     fg[1 + epsi_start] = vars[epsi_start];
 
+    #ifdef _USE_LATENCY_CONSTRAINT
+    fg[1 + delta_start] = vars[delta_start];
+    fg[1 + a_start] = vars[a_start];
+    #endif
+
     // The rest of the constraints
     for (size_t t = 1; t < N; t++) {
       // The state at time t+1 .
@@ -126,15 +131,21 @@ class FG_eval {
       // put in a constraint that the acceleration and steering for every alternate
       // time T won't be changed
 #ifdef _USE_LATENCY_CONSTRAINT
+      // for every other 100ms we need to make sure that there is a constraint
+      // to use the same value as before
+
       if (t % 2 == 1) {
         AD<double> delta1 = vars[delta_start + t];
         AD<double> a1 = vars[a_start + t];
 
+        cout << "Constraint @: " << 1 + delta_start + t - 1 << " for time: " << t << endl;
         fg[1 + delta_start + t - 1] = delta1 - delta0;
         fg[1 + delta_start + t] = a1 - a0;
       }
 #endif
     }
+
+    cout << "Going out" << endl;
   }
 };
 
@@ -165,7 +176,16 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   double epsi = state[5];
 
   size_t n_vars = N * 6 + (N - 1) * 2;
+
 #ifdef _USE_LATENCY_CONSTRAINT
+  double delta = state[6];
+  double a = state[7];
+
+  // The value set for delta and acceleration will remain the same
+  // for the next 100ms, then it can change and then again for the next
+  // 100ms the value cannot change. Therefore there will be
+  // ((N - 1) / 2) * 2 more constraints.
+
   size_t n_constraints = N * 6 + (N - 1);
 #else
   size_t n_constraints = N * 6;
@@ -183,6 +203,11 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   vars[v_start] = v;
   vars[cte_start] = cte;
   vars[epsi_start] = epsi;
+
+  #ifdef _USE_LATENCY_CONSTRAINT
+  vars[delta_start] = delta;
+  vars[a_start] = a;
+  #endif
 
   Dvector vars_lowerbound(n_vars);
   Dvector vars_upperbound(n_vars);
@@ -207,6 +232,7 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // Should be 0 besides initial state.
   Dvector constraints_lowerbound(n_constraints);
   Dvector constraints_upperbound(n_constraints);
+
   for (size_t i = 0; i < n_constraints; i++) {
     constraints_lowerbound[i] = 0;
     constraints_upperbound[i] = 0;
@@ -218,6 +244,13 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   constraints_lowerbound[v_start] = v;
   constraints_lowerbound[cte_start] = cte;
   constraints_lowerbound[epsi_start] = epsi;
+
+#ifdef _USE_LATENCY_CONSTRAINT
+  constraints_lowerbound[delta_start] = delta;
+  constraints_upperbound[delta_start] = delta;
+  constraints_lowerbound[a_start] = a;
+  constraints_upperbound[a_start] = a;
+#endif
 
   constraints_upperbound[x_start] = x;
   constraints_upperbound[y_start] = y;

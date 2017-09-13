@@ -101,10 +101,12 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta = j[1]["steering_angle"];
+          double a = j[1]["throttle"];
 
           // transform all points sent by the simulator into car coordinate system
-          Eigen::VectorXd ptsx_transform(ptsx.size());
-          Eigen::VectorXd ptsy_transform(ptsx.size());
+          Eigen::VectorXd ptsx_transform(6);
+          Eigen::VectorXd ptsy_transform(6);
 
           for (size_t i = 0; i < ptsx.size(); i++) {
             double shift_x = ptsx[i] - px;
@@ -125,8 +127,24 @@ int main() {
           double cte = polyeval(coeffs, 0);
           double epsi = -atan(coeffs[1]);
 
+          // cater to the latency. figure out where the car will be in 100ms
+          // and then pass that to the solver
+#ifdef _USE_EQUATIONS
+          const double latency = 0.1;
+          px = v * latency;
+          py = 0;                           // lets keep this 0 but cater the effect into CTE
+          psi = -v / Lf * delta * latency;
+          epsi += psi;
+          cte += v * sin(epsi) * latency;   // CTE is basically how far the car is from the Y, so just increase that with delta_y
+          v += a * latency;
+#else
+          px = 0;
+          py = 0;
+          psi = 0;
+#endif
+
           Eigen::VectorXd state(6);
-          state << 0, 0, 0, v, cte, epsi;
+          state << px, py, psi, v, cte, epsi, delta, a;
 
           Result mpc_result = mpc.Solve(state, coeffs);
 
