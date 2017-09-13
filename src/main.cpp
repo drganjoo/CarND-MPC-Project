@@ -83,7 +83,7 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-//    cout << sdata << endl;
+    cout << sdata << endl;
 
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
@@ -130,37 +130,9 @@ int main() {
 
           Result mpc_result = mpc.Solve(state, coeffs);
 
-//          const double Lf = 2.67;
-//          const double steering_to_degrees = deg2rad(25.0) * Lf;
-//
-//          double steer_value = vars[0] / steering_to_degrees;
-//          double throttle_value = vars[1];
-
           double steer_value;
           double throttle_value;
 
-//          if (!initialized) {
-//            initialized = true;
-//            last_call = system_clock::now();
-//            last_cte = cte;
-//            steer_value = 0;
-//            throttle_value = 0;
-//          }
-//          else {
-//            const double kp = 0.09, kd = 0.2;
-//
-//            double dt = duration_cast<milliseconds>(system_clock::now() - last_call).count() / 1000.0;
-//            last_call = system_clock::now();
-//
-//            steer_value = kp * cte + kd * (cte - last_cte) / dt;
-//            throttle_value = 0.3;
-//
-//            last_cte = cte;
-//          }
-//          if (steer_value > 1)
-//            steer_value = 1;
-//          else if (steer_value < -11)
-//            steer_value = -1;
 
           steer_value = mpc_result.steering;
           throttle_value = mpc_result.throttle;
@@ -169,6 +141,8 @@ int main() {
           steer_value /= steering_to_control;
 
           cout.precision(5);
+          cout << "CTE:" << cte << "\tCost:" << mpc_result.cost << endl;
+
 //          cout << "CTE:\t" << cte
 //               << " MPC steering (Radians):\t" << fixed << mpc_result.steering
 //               << " MPC steering (Degrees):\t" << fixed << rad2deg(mpc_result.steering)
@@ -211,10 +185,10 @@ int main() {
           msgJson["next_y"] = next_y_vals;
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-//          std::cout << msg << std::endl;
+          std::cout << msg << std::endl;
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          //this_thread::sleep_for(chrono::milliseconds(100));
+          this_thread::sleep_for(chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {

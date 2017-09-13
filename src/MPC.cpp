@@ -3,6 +3,8 @@
 #include <cppad/ipopt/solve.hpp>
 #include "Eigen-3.3/Eigen/Core"
 
+#define _USE_LATENCY_CONSTRAINT
+
 using CppAD::AD;
 
 size_t N = 25;
@@ -123,13 +125,15 @@ class FG_eval {
 
       // put in a constraint that the acceleration and steering for every alternate
       // time T won't be changed
-//      if (t % 2 == 1) {
-//        AD<double> delta1 = vars[delta_start + t];
-//        AD<double> a1 = vars[a_start + t];
-//
-//        fg[1 + delta_start + t - 1] = delta1 - delta0;
-//        fg[1 + delta_start + t] = a1 - a0;
-//      }
+#ifdef _USE_LATENCY_CONSTRAINT
+      if (t % 2 == 1) {
+        AD<double> delta1 = vars[delta_start + t];
+        AD<double> a1 = vars[a_start + t];
+
+        fg[1 + delta_start + t - 1] = delta1 - delta0;
+        fg[1 + delta_start + t] = a1 - a0;
+      }
+#endif
     }
   }
 };
@@ -138,7 +142,10 @@ class FG_eval {
 // MPC class definition implementation.
 //
 MPC::MPC() {
-  cout << "Using N: " << N << " DT: " << dt << endl;
+  cout << "Using N: " << N << " DT: " << dt << " Ref speed: " << ref_v << endl;
+#ifdef _USE_LATENCY_CONSTRAINT
+  cout << "Using latency constraints" << endl;
+#endif
 }
 
 MPC::~MPC() {
@@ -158,8 +165,11 @@ Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   double epsi = state[5];
 
   size_t n_vars = N * 6 + (N - 1) * 2;
+#ifdef _USE_LATENCY_CONSTRAINT
+  size_t n_constraints = N * 6 + (N - 1);
+#else
   size_t n_constraints = N * 6;
-  //size_t n_constraints = N * 6 + (N - 1);
+#endif
 
   Dvector vars(n_vars);
   for (size_t i = 0; i < n_vars; i++) {
