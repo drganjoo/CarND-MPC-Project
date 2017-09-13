@@ -4,6 +4,8 @@
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
 
+const double Lf = 2.67;
+
 using namespace std;
 
 struct Result{
