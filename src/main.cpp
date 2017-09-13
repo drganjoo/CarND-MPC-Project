@@ -143,7 +143,7 @@ int main() {
           psi = 0;
 #endif
 
-          Eigen::VectorXd state(6);
+          Eigen::VectorXd state(8);
           state << px, py, psi, v, cte, epsi, delta, a;
 
           Result mpc_result = mpc.Solve(state, coeffs);
